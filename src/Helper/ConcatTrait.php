@@ -28,9 +28,7 @@
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  * @link     https://vufind.org/wiki/development Wiki
  */
-namespace VuFindTheme\View\Helper;
-
-use VuFindTheme\ThemeInfo;
+namespace VuFindView\Helper;
 
 /**
  * Trait to add asset pipeline functionality (concatenation / minification) to
@@ -137,7 +135,7 @@ trait ConcatTrait
     protected $concatIndex = null;
 
     /**
-     * Check if config is enamled for this file type
+     * Check if config is enabled for this file type
      *
      * @param string|bool $config Config for current application environment
      *
@@ -145,16 +143,33 @@ trait ConcatTrait
      */
     protected function enabledInConfig($config)
     {
-        if ($config === false || $config == 'off') {
+        if ($config === false || $config === 'off') {
             return false;
         }
-        if ($config == '*' || $config == 'on'
-            || $config == 'true' || $config === true
+        if ($config === '*' || $config === 'on'
+            || $config === 'true' || $config === true
         ) {
             return true;
         }
         $settings = array_map('trim', explode(',', $config));
         return in_array($this->getFileType(), $settings);
+    }
+
+    /**
+     * Get the filesystem path for the provided resource file path
+     *
+     * @param string $path Path
+     *
+     * @return ?string
+     */
+    protected function getResourceFileFilesystemPath(string $path): ?string
+    {
+        if (!defined('APPLICATION_PATH')) {
+            throw new \Exception(
+                'Asset pipeline feature depends on the APPLICATION_PATH constant.'
+            );
+        }
+        return APPLICATION_PATH . '/public' . $path;
     }
 
     /**
@@ -181,14 +196,11 @@ trait ConcatTrait
                 continue;
             }
 
-            $path = $this->getFileType() . '/' . $this->getResourceFilePath($item);
-            $details = $this->themeInfo->findContainingTheme(
-                $path,
-                ThemeInfo::RETURN_ALL_DETAILS
-            );
-            // Deal with special case: $path was not found in any theme.
-            if (null === $details) {
-                $errorMsg = "Could not find file '$path' in theme files";
+            $path = $this->getResourceFilePath($item);
+            $absolutePath = $this->getResourceFileFilesystemPath($path);
+            // Deal with special case: processed path is null.
+            if (null === $absolutePath) {
+                $errorMsg = "Could not process path for '$path'";
                 method_exists($this, 'logError')
                     ? $this->logError($errorMsg) : error_log($errorMsg);
                 $this->groups[] = [
@@ -204,13 +216,13 @@ trait ConcatTrait
             if ($index === false) {
                 $this->groups[] = [
                     'items' => [$item],
-                    'key' => $details['path'] . filemtime($details['path'])
+                    'key' => $absolutePath . filemtime($absolutePath)
                 ];
                 $groupTypes[] = $type;
             } else {
                 $this->groups[$index]['items'][] = $item;
                 $this->groups[$index]['key'] .=
-                    $details['path'] . filemtime($details['path']);
+                    $absolutePath . filemtime($absolutePath);
             }
         }
 
@@ -247,13 +259,7 @@ trait ConcatTrait
 
         // Don't recompress individual files
         if (count($group['items']) === 1) {
-            $path = $this->getResourceFilePath($group['items'][0]);
-            $details = $this->themeInfo->findContainingTheme(
-                $this->getFileType() . '/' . $path,
-                ThemeInfo::RETURN_ALL_DETAILS
-            );
-            return $urlHelper('home') . 'themes/' . $details['theme']
-                . '/' . $this->getFileType() . '/' . $path;
+            return $this->getResourceFilePath($group['items'][0]);
         }
         // Locate/create concatenated asset file
         $filename = md5($group['key']) . '.min.' . $this->getFileType();
@@ -263,6 +269,8 @@ trait ConcatTrait
         $concatPath = realpath($this->getResourceCacheDir()) . '/' . $filename;
         if (!file_exists($concatPath)) {
             $lockfile = "$concatPath.lock";
+            touch($lockfile);
+            chmod($lockfile, 0664);
             $handle = fopen($lockfile, 'c+');
             if (!is_resource($handle)) {
                 throw new \Exception("Could not open lock file $lockfile");
@@ -301,40 +309,38 @@ trait ConcatTrait
     {
         $data = [];
         foreach ($group['items'] as $item) {
-            $details = $this->themeInfo->findContainingTheme(
-                $this->getFileType() . '/'
-                . $this->getResourceFilePath($item),
-                ThemeInfo::RETURN_ALL_DETAILS
+            $path = $this->getResourceFileFilesystemPath(
+                $this->getResourceFilePath($item)
             );
-            $details['path'] = realpath($details['path']);
-            $data[] = $this->getMinifiedData($details, $concatPath);
+            $data[] = $this->getMinifiedData($path, $concatPath);
         }
         // Separate each file's data with a new line so that e.g. a file
         // ending in a comment doesn't cause the next one to also get commented out.
         file_put_contents($concatPath, implode("\n", $data));
+        chmod($concatPath, 0664);
     }
 
     /**
      * Get minified data for a file
      *
-     * @param array  $details    File details
+     * @param string $path       File path
      * @param string $concatPath Target path for the resulting file (used in minifier
      * for path mapping)
      *
      * @throws \Exception
      * @return string
      */
-    protected function getMinifiedData($details, $concatPath)
+    protected function getMinifiedData(string $path, string $concatPath): string
     {
-        if ($this->isMinifiable($details['path'])) {
+        if ($this->isMinifiable($path)) {
             $minifier = $this->getMinifier();
-            $minifier->add($details['path']);
+            $minifier->add($path);
             $data = $minifier->execute($concatPath);
         } else {
-            $data = file_get_contents($details['path']);
+            $data = file_get_contents($path);
             if (false === $data) {
                 throw new \Exception(
-                    "Could not read file {$details['path']}"
+                    "Could not read file {$path}"
                 );
             }
         }

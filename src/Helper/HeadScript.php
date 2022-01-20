@@ -25,9 +25,7 @@
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  * @link     https://vufind.org/wiki/development Wiki
  */
-namespace VuFindTheme\View\Helper;
-
-use VuFindTheme\ThemeInfo;
+namespace VuFindView\Helper;
 
 /**
  * Head script view helper (extended for VuFind's theme system)
@@ -39,19 +37,10 @@ use VuFindTheme\ThemeInfo;
  * @link     https://vufind.org/wiki/development Wiki
  */
 class HeadScript extends \Laminas\View\Helper\HeadScript
-    implements \Laminas\Log\LoggerAwareInterface
 {
     use ConcatTrait {
         getMinifiedData as getBaseMinifiedData;
     }
-    use \VuFind\Log\LoggerAwareTrait;
-
-    /**
-     * Theme information service
-     *
-     * @var ThemeInfo
-     */
-    protected $themeInfo;
 
     /**
      * CSP nonce
@@ -63,14 +52,12 @@ class HeadScript extends \Laminas\View\Helper\HeadScript
     /**
      * Constructor
      *
-     * @param ThemeInfo   $themeInfo Theme information service
-     * @param string|bool $plconfig  Config for current application environment
-     * @param string      $nonce     Nonce from nonce generator
+     * @param string|bool $plconfig Config for current application environment
+     * @param string      $nonce    Nonce from nonce generator
      */
-    public function __construct(ThemeInfo $themeInfo, $plconfig = false, $nonce = '')
+    public function __construct($plconfig = false, $nonce = '')
     {
         parent::__construct();
-        $this->themeInfo = $themeInfo;
         $this->usePipeline = $this->enabledInConfig($plconfig);
         $this->cspNonce = $nonce;
         $this->optionalAttributes[] = 'nonce';
@@ -98,21 +85,6 @@ class HeadScript extends \Laminas\View\Helper\HeadScript
      */
     public function itemToString($item, $indent, $escapeStart, $escapeEnd)
     {
-        // Normalize href to account for themes:
-        if (!empty($item->attributes['src'])) {
-            $relPath = 'js/' . $item->attributes['src'];
-            $details = $this->themeInfo
-                ->findContainingTheme($relPath, ThemeInfo::RETURN_ALL_DETAILS);
-
-            if (!empty($details)) {
-                $urlHelper = $this->getView()->plugin('url');
-                $url = $urlHelper('home') . "themes/{$details['theme']}/" . $relPath;
-                $url .= strstr($url, '?') ? '&_=' : '?_=';
-                $url .= filemtime($details['path']);
-                $item->attributes['src'] = $url;
-            }
-        }
-
         $this->addNonce($item);
         return parent::itemToString($item, $indent, $escapeStart, $escapeEnd);
     }
@@ -202,16 +174,16 @@ class HeadScript extends \Laminas\View\Helper\HeadScript
     /**
      * Get minified data for a file
      *
-     * @param array  $details    File details
+     * @param string $path       File path
      * @param string $concatPath Target path for the resulting file (used in minifier
      * for path mapping)
      *
      * @throws \Exception
      * @return string
      */
-    protected function getMinifiedData($details, $concatPath)
+    protected function getMinifiedData(string $path, string $concatPath): string
     {
-        $data = $this->getBaseMinifiedData($details, $concatPath);
+        $data = $this->getBaseMinifiedData($path, $concatPath);
         // Play it safe by terminating a script with a semicolon
         if (substr(trim($data), -1, 1) !== ';') {
             $data .= ';';
@@ -228,6 +200,8 @@ class HeadScript extends \Laminas\View\Helper\HeadScript
      */
     protected function addNonce($item)
     {
-        $item->attributes['nonce'] = $this->cspNonce;
+        if (!empty($this->cspNonce)) {
+            $item->attributes['nonce'] = $this->cspNonce;
+        }
     }
 }

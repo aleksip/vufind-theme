@@ -1,1 +1,1 @@
-# vufind-theme
+# vufindview

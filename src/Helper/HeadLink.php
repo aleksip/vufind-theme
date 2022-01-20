@@ -25,9 +25,7 @@
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  * @link     https://vufind.org/wiki/development Wiki
  */
-namespace VuFindTheme\View\Helper;
-
-use VuFindTheme\ThemeInfo;
+namespace VuFindView\Helper;
 
 /**
  * Head link view helper (extended for VuFind's theme system)
@@ -39,17 +37,8 @@ use VuFindTheme\ThemeInfo;
  * @link     https://vufind.org/wiki/development Wiki
  */
 class HeadLink extends \Laminas\View\Helper\HeadLink
-    implements \Laminas\Log\LoggerAwareInterface
 {
     use ConcatTrait;
-    use \VuFind\Log\LoggerAwareTrait;
-
-    /**
-     * Theme information service
-     *
-     * @var ThemeInfo
-     */
-    protected $themeInfo;
 
     /**
      * CSP nonce
@@ -68,19 +57,16 @@ class HeadLink extends \Laminas\View\Helper\HeadLink
     /**
      * Constructor
      *
-     * @param ThemeInfo   $themeInfo     Theme information service
      * @param string|bool $plconfig      Config for current application environment
      * @param string      $nonce         Nonce from nonce generator
      * @param int         $maxImportSize Maximum imported (inlined) file size
      */
     public function __construct(
-        ThemeInfo $themeInfo,
         $plconfig = false,
         $nonce = '',
         $maxImportSize = null
     ) {
         parent::__construct();
-        $this->themeInfo = $themeInfo;
         $this->usePipeline = $this->enabledInConfig($plconfig);
         $this->cspNonce = $nonce;
         $this->maxImportSize = $maxImportSize;
@@ -106,65 +92,8 @@ class HeadLink extends \Laminas\View\Helper\HeadLink
      */
     public function itemToString(\stdClass $item)
     {
-        // Normalize href to account for themes, then call the parent class:
-        $relPath = 'css/' . $item->href;
-        $details = $this->themeInfo
-            ->findContainingTheme($relPath, ThemeInfo::RETURN_ALL_DETAILS);
-
-        if (!empty($details)) {
-            $urlHelper = $this->getView()->plugin('url');
-            $url = $urlHelper('home') . "themes/{$details['theme']}/" . $relPath;
-            $url .= strstr($url, '?') ? '&_=' : '?_=';
-            $url .= filemtime($details['path']);
-            $item->href = $url;
-        }
         $this->addNonce($item);
         return parent::itemToString($item);
-    }
-
-    /**
-     * Compile a less file to css and add to css folder
-     *
-     * @param string $file Path to less file
-     *
-     * @return string
-     */
-    public function addLessStylesheet($file)
-    {
-        $relPath = 'less/' . $file;
-        $urlHelper = $this->getView()->plugin('url');
-        $currentTheme = $this->themeInfo->findContainingTheme($relPath);
-        $helperHome = $urlHelper('home');
-        $home = APPLICATION_PATH . '/themes/' . $currentTheme . '/';
-        $cssDirectory = $helperHome . 'themes/' . $currentTheme . '/css/less/';
-
-        try {
-            $less_files = [
-                APPLICATION_PATH . '/themes/' . $currentTheme . '/' . $relPath
-                    => $cssDirectory
-            ];
-            $themeParents = array_keys($this->themeInfo->getThemeInfo());
-            $directories = [];
-            foreach ($themeParents as $theme) {
-                $directories[APPLICATION_PATH . '/themes/' . $theme . '/less/']
-                    = $helperHome . 'themes/' . $theme . '/css/less/';
-            }
-            $css_file_name = \Less_Cache::Get(
-                $less_files,
-                [
-                    'cache_dir' => $home . 'css/less/',
-                    'cache_method' => false,
-                    'compress' => true,
-                    'import_dirs' => $directories,
-                    'output' => str_replace('.less', '.css', $file)
-                ]
-            );
-            return $cssDirectory . $css_file_name;
-        } catch (\Exception $e) {
-            error_log($e->getMessage());
-            [$fileName, ] = explode('.', $file);
-            return $urlHelper('home') . "themes/{$currentTheme}/css/{$fileName}.css";
-        }
     }
 
     /**
@@ -256,11 +185,11 @@ class HeadLink extends \Laminas\View\Helper\HeadLink
      * Get the minifier that can handle these file types
      * Required by ConcatTrait
      *
-     * @return \MatthiasMullie\Minify\JS
+     * @return \MatthiasMullie\Minify\CSS
      */
     protected function getMinifier()
     {
-        $minifier = new \VuFindTheme\Minify\CSS();
+        $minifier = new \MatthiasMullie\Minify\CSS();
         if (null !== $this->maxImportSize) {
             $minifier->setMaxImportSize($this->maxImportSize);
         }

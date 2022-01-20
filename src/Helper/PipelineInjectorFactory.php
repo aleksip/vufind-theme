@@ -1,10 +1,10 @@
 <?php
 /**
- * TemplatePath helper factory.
+ * Factory for helpers relying on asset pipeline configuration.
  *
  * PHP version 7
  *
- * Copyright (C) Villanova University 2018.
+ * Copyright (C) Villanova University 2019.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2,
@@ -20,29 +20,26 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  * @category VuFind
- * @package  View_Helpers
- * @author   Chris Hallberg <challber@villanova.edu>
+ * @package  Theme
+ * @author   Demian Katz <demian.katz@villanova.edu>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
- * @link     https://vufind.org/wiki/development Wiki
+ * @link     https://vufind.org Main Site
  */
-namespace VuFindTheme\View\Helper;
+namespace VuFindView\Helper;
 
 use Interop\Container\ContainerInterface;
-use Interop\Container\Exception\ContainerException;
-use Laminas\ServiceManager\Exception\ServiceNotCreatedException;
-use Laminas\ServiceManager\Exception\ServiceNotFoundException;
 use Laminas\ServiceManager\Factory\FactoryInterface;
 
 /**
- * TemplatePath helper factory.
+ * Factory for helpers relying on asset pipeline configuration.
  *
  * @category VuFind
- * @package  View_Helpers
- * @author   Chris Hallberg <challber@villanova.edu>
+ * @package  Theme
+ * @author   Demian Katz <demian.katz@villanova.edu>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
- * @link     https://vufind.org/wiki/development Wiki
+ * @link     https://vufind.org Main Site
  */
-class TemplatePathFactory implements FactoryInterface
+class PipelineInjectorFactory implements FactoryInterface
 {
     /**
      * Create an object
@@ -52,11 +49,6 @@ class TemplatePathFactory implements FactoryInterface
      * @param null|array         $options       Extra options (optional)
      *
      * @return object
-     *
-     * @throws ServiceNotFoundException if unable to resolve the service.
-     * @throws ServiceNotCreatedException if an exception is raised when
-     * creating a service.
-     * @throws ContainerException&\Throwable if any other error occurs
      */
     public function __invoke(
         ContainerInterface $container,
@@ -66,8 +58,13 @@ class TemplatePathFactory implements FactoryInterface
         if (!empty($options)) {
             throw new \Exception('Unexpected options sent to factory.');
         }
+        if (!defined('APPLICATION_ENV')) {
+            throw new \Exception(
+                'Asset pipeline feature depends on the APPLICATION_ENV constant.'
+            );
+        }
         return new $requestedName(
-            $container->get(\Laminas\View\Resolver\TemplatePathStack::class)
+            'development' !== APPLICATION_ENV
         );
     }
 }
